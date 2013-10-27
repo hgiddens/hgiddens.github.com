@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: lisp | Robotines]]></title>
+  <link href="http://blog.robotines.co.nz/blog/categories/lisp/atom.xml" rel="self"/>
+  <link href="http://blog.robotines.co.nz/"/>
+  <updated>2013-10-27T21:49:57+11:00</updated>
+  <id>http://blog.robotines.co.nz/</id>
+  <author>
+    <name><![CDATA[Huw Giddens]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Lexical and dynamic scoping]]></title>
+    <link href="http://blog.robotines.co.nz/blog/2013/10/27/lexical-and-dynamic-scoping/"/>
+    <updated>2013-10-27T19:30:00+11:00</updated>
+    <id>http://blog.robotines.co.nz/blog/2013/10/27/lexical-and-dynamic-scoping</id>
+    <content type="html"><![CDATA[<p>A discussion at work on Friday evolved into how some language features were reminiscent of monads – for example, Objective‐C's handling of <code>nil</code> is similar to language level support for the maybe monad – and I noted I felt some similarity between the reader monad and how some languages use dynamically scoped variables. This then led to a fun digression about what dynamic scoping (AKA dynamic binding) might be, and me promising to write a quick blog post.</p>
+
+<h2>Lexical scoping</h2>
+
+<p>Before looking at dynamic scoping let's look again at lexical scoping. Lexical scoping is the scoping that we're used to from languages like Javascript, Ruby, Scheme, Java, <em>et al</em>. It's very common and what most people are used to, it's what makes closures work, and it's where free variables in functions are bound based on the defining environment. For example, in Scheme (a lexically-scoped Lisp):</p>
+
+<p>```scheme
+(define (outer)
+  (let ((x 1))</p>
+
+<pre><code>(lambda () x)))
+</code></pre>
+
+<p>((outer)) ;; returns 1
+```</p>
+
+<p>There's no value for <code>x</code> bound when <code>outer</code> is called, but <code>1</code> is still returned because the definition of the inner function captures the value of <code>x</code> at the definition site.</p>
+
+<h2>Dynamic scoping</h2>
+
+<p>In contrast, consider the equivalent in Emacs Lisp (which is dynamically-scoped by default, although as of 24.3 <a href="http://www.emacswiki.org/emacs/LexicalBinding">Emacs also supports lexical scoping</a>):</p>
+
+<p>```common-lisp
+(defun outer ()
+  (let ((x 1))</p>
+
+<pre><code>(lambda () x)))
+</code></pre>
+
+<p>(funcall (outer)) ;; Lisp error: (void-variable x)
+```</p>
+
+<p>We get an error here because, even though <code>x</code> was bound when the inner function was defined, it was unbound when it was called. On the other hand, though, we can write the following:</p>
+
+<p><code>common-lisp
+(defun outer () x)
+(let ((x 1))
+  (outer)) ;; 1
+</code></p>
+
+<p>Here, we're defining <code>outer</code> in a context where <code>x</code> is unbound, but everything's fine because when we call <code>outer</code> we <em>do</em> have <code>x</code> bound to <code>1</code>.</p>
+
+<h4>Languages with some form of dynamic scoping</h4>
+
+<ul>
+<li>Many Lisps have support for dynamic scoping to some extent. Special variables in Common Lisp are bound dynamically, top level vars in Clojure <em>can</em> be dynamically bound via <code>binding</code>, and Emacs Lisp is still dynamic by default even though it now supports lexical scoping.</li>
+<li>Perl <code>our</code> variables can by dynamically rebound via <code>local</code>.</li>
+<li>TeX is dynamically scoped.</li>
+</ul>
+
+
+<h2>Determining if lexical or dynamic scoping is in effect</h2>
+
+<p>It's simple to craft an expression that will evaluate differently based on lexical or dynamic scoping being in effect, and this can be used in languages that support both to determine which is currently being used:</p>
+
+<p>```common-lisp
+;; In Emacs Lisp, the second argument to eval, if true, means to use
+;; lexical scoping.
+(eval '(let ((scope 'dynamic))</p>
+
+<pre><code>     (funcall (let ((scope 'lexical))
+                (lambda () scope))))
+  nil) ;; dynamic
+</code></pre>
+
+<p>(eval '(let ((scope 'dynamic))</p>
+
+<pre><code>     (funcall (let ((scope 'lexical))
+                (lambda () scope))))
+  t) ;; lexical
+</code></pre>
+
+<p>```</p>
+
+<h2>Scoping implementation in a simple Lisp interpreter</h2>
+
+<blockquote><p>Literature about Lisp rarely resists that narcissistic pleasure of describing Lisp in Lisp. – Lisp in Small Pieces</p></blockquote>
+
+<p>The first chapter of <a href="http://www.amazon.com/Lisp-Small-Pieces-Christian-Queinnec/dp/0521545668">Lisp in Small Pieces</a> deals with implementing a simple interpreter for a Lisp. An even more simplified version of that interpreter (written in Guile Scheme, and implementing a Lisp-1 similar to Scheme) follows.</p>
+
+<p>```scheme
+(define env.init '())</p>
+
+<p>(define (lookup var env) ;; find variable in an environment
+  (if (pair? env)</p>
+
+<pre><code>  (if (eq? (caar env) var)
+      (cdar env)
+      (lookup var (cdr env)))
+  (error "No such binding" var)))
+</code></pre>
+
+<p>(define (eprogn exps env) ;; eval expressions in an environment, return last
+  (if (pair? exps)</p>
+
+<pre><code>  (if (pair? (cdr exps))
+      (begin (evaluate (car exps) env)
+             (eprogn (cdr exps) env))
+      (evaluate (car exps) env))
+  '()))
+</code></pre>
+
+<p>(define (evlis exps env) ;; eval expressions in an environment, return all
+  (if (pair? exps)</p>
+
+<pre><code>  (cons (evaluate (car exps) env)
+        (evlis (cdr exps) env))
+  '()))
+</code></pre>
+
+<p>(define (extend env variables values) ;; extend environment with vars with values
+  (cond ((pair? variables)</p>
+
+<pre><code>     (if (pair? values)
+         (cons (cons (car variables) (car values))
+               (extend env (cdr variables) (cdr values)))
+         (error "Too few values")))
+    ((null? variables)
+     (if (null? values)
+         env
+         (error "Too many values")))
+    ((symbol? variables)
+     (cons (cons variables values) env))))
+</code></pre>
+
+<p>(define (invoke fn args env) ;; invoke fn with arguments in an environment
+  (if (procedure? fn)</p>
+
+<pre><code>  (fn args env)
+  (error "Not a function" fn)))
+</code></pre>
+
+<p>(define (make-function variables body env.definition) ;; create new function
+  (lambda (values env.current)</p>
+
+<pre><code>(eprogn body (extend env.current variables values))))
+</code></pre>
+
+<p>(define (evaluate exp env) ;; evaluate an expression in an environment
+  (if (not (pair? exp)) ;; (atom? exp)</p>
+
+<pre><code>  (if (symbol? exp) (lookup exp env) exp)
+  (case (car exp)
+    ((quote) (cadr exp))
+    ((lambda) (make-function (cadr exp) (cddr exp) env))
+    (else (invoke (evaluate (car exp) env)
+                  (evlis (cdr exp) env)
+                  env)))))
+</code></pre>
+
+<p>```</p>
+
+<p>This gives us a language where we can define functions, apply them, and not much else, but it's sufficient for the purposes of demonstration. This is a dynamically scoped Lisp, and it stores the environment (all currently bound variables, and their values) as a list of variable-value pairs. The part of the code that makes this the case is <code>make-function</code> (repeated here):</p>
+
+<p>```common-lisp
+(define (make-function variables body env.definition)
+  (lambda (values env.current)</p>
+
+<pre><code>(eprogn body (extend env.current variables values))))
+</code></pre>
+
+<p>```</p>
+
+<p>This creates a new function, with argument variables passed in <code>variables</code>, the function body in <code>body</code>, and the environment at the point of definition in <code>env.definition</code>. The new function – which will eventually be called by <code>invoke</code> – takes a list of argument values in <code>values</code> and the environment at the point of invocation in <code>env.current</code>. The body is evaluated by <code>eprogn</code> in an environment that is the enviroment at the point of invocation extended by the arguments, and it's this that makes it dynamically scoped.</p>
+
+<h4>Aside: <code>let</code> as <code>lambda</code></h4>
+
+<p>Our little language doesn't have <code>let</code>, so we can't directly use our test expression from above to verify that we have the scope we believe we do. However, <code>let</code> can be implemented in terms of <code>lambda</code> in the following way (incidentally, this is the same trick as is used in JavaScript to, for instance, have variables isolated to a loop body):</p>
+
+<p><code>scheme
+(let ((x y))
+  z)
+;; can be expressed as
+((lambda (x) z) y)
+</code></p>
+
+<p>Using this, we can verify our little language is, indeed, dynamically scoped:</p>
+
+<p>```scheme
+(evaluate ((lambda (scope)</p>
+
+<pre><code>         (((lambda (scope)
+             (lambda () scope))
+           (quote lexical))))
+       (quote dynamic))) ;; dynamic
+</code></pre>
+
+<p>```</p>
+
+<h4>So what about lexical scoping</h4>
+
+<p>This is the cool bit. Because it's just our <code>make-function</code> definition that makes the language dynamically scoped, if we want a lexically scoped language instead, we just have to change it to evaluate the function body in an extension of the <em>definition</em> enviroment rather than the <em>invocation</em> environment:</p>
+
+<p>```scheme
+(define (make-function variables body env.definition)
+  (lambda (values env.current)</p>
+
+<pre><code>(eprogn body (extend env.definition variables values))))
+</code></pre>
+
+<p>;; And with the above definition
+(evaluate ((lambda (scope)</p>
+
+<pre><code>         (((lambda (scope)
+             (lambda () scope))
+           (quote lexical))))
+       (quote dynamic))) ;; lexical    
+</code></pre>
+
+<p>```</p>
+
+<h2>More reading</h2>
+
+<ul>
+<li><a href="http://www.schemers.org/Documents/Standards/R5RS/">R5RS</a> – an older version of the Scheme spec</li>
+<li><a href="ftp://publications.ai.mit.edu/ai-publications/pdf/AIM-379.pdf">Lambda: The Ultimate Declarative</a></li>
+<li><a href="http://en.wikipedia.org/wiki/Scope_(computer_science)">Scope (computer science) Wikipedia article</a></li>
+</ul>
+
+]]></content>
+  </entry>
+  
+</feed>

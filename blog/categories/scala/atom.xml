@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: scala | Robotines]]></title>
+  <link href="http://blog.robotines.co.nz/blog/categories/scala/atom.xml" rel="self"/>
+  <link href="http://blog.robotines.co.nz/"/>
+  <updated>2013-10-27T21:49:57+11:00</updated>
+  <id>http://blog.robotines.co.nz/</id>
+  <author>
+    <name><![CDATA[Huw Giddens]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Function composition]]></title>
+    <link href="http://blog.robotines.co.nz/blog/2012/11/29/function-composition/"/>
+    <updated>2012-11-29T15:27:00+11:00</updated>
+    <id>http://blog.robotines.co.nz/blog/2012/11/29/function-composition</id>
+    <content type="html"><![CDATA[<p>Today, I found myself wanting to compose two methods:</p>
+
+<p>``` scala</p>
+
+<pre><code>// What I had
+def failureToEvent(failure: Failure): Event
+def publish(event: Event): Unit
+
+// What I needed
+val composed: Failure =&gt; Unit
+</code></pre>
+
+<p>```</p>
+
+<p>Manually writing a function that is the composition of these two is easy enough, but this was a pattern that was repeating itself all over the place; I wanted to be able to define these composed functions inline. Fortunately, composing two functions like this is extremely simple:</p>
+
+<p>``` scala</p>
+
+<pre><code>scala&gt; (failureToEvent _) andThen publish
+res0: Failure =&gt; Unit = &lt;function1&gt;
+</code></pre>
+
+<p>```</p>
+
+<p>Fantastic!</p>
+
+<h2>Mission accomplished?</h2>
+
+<p>This works well enough, but I discovered some cases where things were a little more complicated:</p>
+
+<p>``` scala</p>
+
+<pre><code>// What I had
+def failureToOptionalEvent(failure: Failure): Option[Event]
+def publish(event: Event): Unit
+
+// What I was willing to accept
+val composed: Failure =&gt; Option[Unit]
+</code></pre>
+
+<p>```</p>
+
+<p>I had the same publish method, but now our failure to event transformation returns an option, stopping us composing things as easily as before. Salvation was at hand, though: I recalled from <a href="http://learnyouahaskell.com">Learn You A Haskell</a> that there's a function <code>fmap</code>:</p>
+
+<p>``` haskell</p>
+
+<pre><code>fmap :: Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</code></pre>
+
+<p>```</p>
+
+<p>This basically means that <code>fmap</code> is a function taking as an argument a function from some type <code>a</code> to some type <code>b</code> (the <code>a -&gt; b</code> part) and returns a function (<code>f a -&gt; f b</code>) which is the original function “lifted” into some functor (<code>Functor f</code> – a functor can be thought of as a type that you can map over; as you might expect, LYAH has <a href="http://learnyouahaskell.com/making-our-own-types-and-typeclasses#the-functor-typeclass">an excellent introduction</a>). After some digging through Scalaz 7, I found an analogue I could use:</p>
+
+<p>``` scala</p>
+
+<pre><code>scala&gt; import scalaz._, Scalaz._
+scala&gt; (failureToOptionalEvent _).andThen(implicitly[Functor[Option]].lift(publish))
+res1: Failure =&gt; Option[Unit] = &lt;function1&gt;
+</code></pre>
+
+<p>```</p>
+
+<p>There is quite a bit of boilerplate though. Scalaz does have special syntax for lifting functions, but <a href="http://stackoverflow.com/questions/13507202/how-to-use-lift-from-tofunctorops">I couldn't make it work</a>; fortunately it's easy enough to write our own equivalent of the <code>lift</code> method here that will work for us (courtesy of Travis Brown):</p>
+
+<p>``` scala</p>
+
+<pre><code>trait MyFunction1Syntax[A, R] extends syntax.Ops[A =&gt; R] {
+  def fmap[F[_]](implicit F: scalaz.Functor[F]) = F lift self
+}
+
+implicit def toMyFunction1Syntax[A, R](f: A =&gt; R) =
+  new MyFunction1Syntax[A, R] { def self = f }
+
+scala&gt; (failureToOptionalEvent _).andThen((publish _).fmap[Option])
+res2: Failure =&gt; Option[Unit] = &lt;function1&gt;
+</code></pre>
+
+<p>```</p>
+
+<h2>More than meets the eye</h2>
+
+<p>This works perfectly well, but I was curious if there was a better way to do this – or at least, a way that didn't involve replicating chunks of Scalaz. After some thought, it occurred to me that since functions and options are monads, we can use monad transformers here! <a href="http://en.wikibooks.org/wiki/Haskell/Monad_transformers">Monad transformers</a> are a way of layering multiple monads on top of each other to create a “monad stack”; the resulting monad transformer is itself a monad which combines the effects of its constituent monads in order. For example, if we have a <code>List[Option[Int]]</code>, we can use the <code>OptionT</code> monad transformer to map a function <code>Int =&gt; Int</code> over the transformed instance (the call to <code>run</code> is to extract the value from the transformer instance):</p>
+
+<p>``` scala</p>
+
+<pre><code>scala&gt; OptionT(List(1.some, 2.some, 3.some, None)).map(_ + 1).run
+res3: List[Option[Int]] = List(Some(2), Some(3), Some(4), None)
+</code></pre>
+
+<p>```</p>
+
+<p>So in much the same way, because functions are monads of their return type we should be able to use <code>OptionT</code> to map <code>publish</code> over the transformed instance:</p>
+
+<p>``` scala</p>
+
+<pre><code>scala&gt; OptionT(failureToOptionalEvent _).map(publish).run
+&lt;console&gt;:23: error: no type parameters for method apply: (run: F[Option[A]])scalaz.OptionT[F,A] in object OptionT exist so that it can be applied to arguments (Failure =&gt; Option[Event])
+ --- because ---
+argument expression's type is not compatible with formal parameter type;
+ found   : Failure =&gt; Option[Event]
+ required: ?F[Option[?A]]
+              OptionT(failureToOptionalEvent _).map(publish).run
+</code></pre>
+
+<p>```</p>
+
+<p>Ugh. This is Scala's way of telling us that we've asked too much of type inference; once you get past a single generic parameter this crops up with distressing frequency. We could fix this by explicitly specifying the type parameters, but I don't like doing this; you're faced with either an explosion of little type aliases (e.g., <code>type IntTo[+A] = Int =&gt; A</code>) or the Lovecraftian horror that is the type lambda syntax. What I instead did was add a <code>.optionT</code> to appropriate function instances:</p>
+
+<p>``` scala</p>
+
+<pre><code>trait ExtraFunction1Ops[A, B] extends syntax.Ops[A =&gt; B] {
+  def optionT[C](implicit ev: B &lt;:&lt; Option[C]) =
+    OptionT[({ type λ[+α] = A =&gt; α })#λ, C](self.map(ev))
+}
+implicit def function1AsExtraFunction1Ops[A, B](fn: A =&gt; B) =
+  new IndraFunction1Ops[A, B] { def self = fn }
+</code></pre>
+
+<p>```</p>
+
+<p>The definition of the <code>optionT</code> method probably warrants discussion:</p>
+
+<ul>
+<li>the trait <code>ExtraFunction1Ops</code> is adding operations to instances of <code>A =&gt; B</code>; however, <code>.optionT</code> should only be callable on instances where <code>B</code> is an option of something. The implicit argument ensures that this is so: there will be an in‐scope implicit of type <code>B &lt;:&lt; Option[C]</code> iff <code>B</code> is, in fact, some subtype of <code>Option[C]</code>.</li>
+<li><code>C</code> is an unconstrained generic parameter; we need this because we have to provide it to <code>OptionT.apply</code>.</li>
+<li>The horrible type lambda <code>({ type λ[+α] = A =&gt; α })#λ</code> is required because <code>OptionT</code>'s first type parameter needs to be the type constructor for the outer monad; while <code>Function1</code>'s type constructor is binary, the type constructor we provide to <code>OptionT</code> <em>must</em> be unary, and so we use the type lambda to constrain the first type parameter of <code>Function1</code> to <code>A</code>.</li>
+<li>Finally, we have to map our <code>ev</code>, our implicit type evidence argument, over the function; this simply converts the signature of <code>self</code> from <code>A =&gt; B</code> to <code>A =&gt; Option[C]</code>.</li>
+</ul>
+
+
+<p>So to recap, initially we had <code>(failureToEvent _) andThen publish</code>. For unary functions, <code>andThen</code> is identical to <code>map</code>, so we can rewrite this as <code>(failureToEvent _).map(publish)</code>. And as for our functions from a failure to an optional event?</p>
+
+<p>``` scala</p>
+
+<pre><code>scala&gt; (failureToOptionalEvent _).optionT.map(publish).run
+res4: Failure =&gt; Option[Unit] = &lt;function1&gt;
+</code></pre>
+
+<p>```</p>
+
+<p>Success.</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Combining predicates in Scala with Scalaz]]></title>
+    <link href="http://blog.robotines.co.nz/blog/2012/11/12/combining-predicates-in-scala-with-scalaz/"/>
+    <updated>2012-11-12T13:04:00+11:00</updated>
+    <id>http://blog.robotines.co.nz/blog/2012/11/12/combining-predicates-in-scala-with-scalaz</id>
+    <content type="html"><![CDATA[<p>Recently I was catching up on some Scala programming blogs when I found <a href="http://timepit.eu/~frank/blog/2012/08/combining_predicates_in_scala/">a post about combining predicates</a>. I'd been wondering about this myself. I find it incredibly useful to be able to simply combine predicates; I find it quite inelegant to write code like the following:</p>
+
+<p>``` scala</p>
+
+<pre><code>// Given
+trait Request { def path: String }
+val isAssetPath: String =&gt; Boolean
+val isMonitoringPath: String =&gt; Boolean
+
+def ignorePath(request: Request) = isAssetPath(request.path) || isMonitoringPath(request.path)
+</code></pre>
+
+<p>```</p>
+
+<p>I had, however, settled on manually combining them as above, and moved on. However, since then I've started trying to get my head around typeclass‐oriented functional programming in general and <a href="https://github.com/scalaz/scalaz">Scalaz 7</a> in particular, and decided to see if that offered a nice solution.</p>
+
+<h2>Combining booleans</h2>
+
+<p>I knew already that Scalaz gives us a nice, generic way to combine booleans: by treating them as monoids. Monoids are a very simple concept <a href="http://en.wikibooks.org/wiki/Haskell/Monoids">that the Haskell Wikibook defines rather nicely</a>:</p>
+
+<blockquote><p>[A] monoid is a data type with an associative operation which combines two elements and a “zero” value which acts as a neutral element for the operation.</p></blockquote>
+
+<p>The sum monoid for integers is an easy one to consider. The combining operation used is addition, and the zero value is zero (the <code>⊹</code> operator below is Scalaz syntax for the append operation; it has an ASCII equivalent of <code>|+|</code>):</p>
+
+<p>``` scala</p>
+
+<pre><code>scala&gt; 1 ⊹ 2
+res0: Int = 3
+</code></pre>
+
+<p>```</p>
+
+<p>For booleans, it's a little trickier: there are two common monoids, representing conjunction (<code>&amp;&amp;</code>, with <code>true</code> as the zero) and disjunction (<code>||</code>, with <code>false</code>). Because neither of these makes more sense than the other as a “default” boolean monoid, Scalaz doesn't place either in the implicit scope; we have to do this ourselves with the appropriate one (as demonstrated by the conjunction example below) or alternatively use the monoid object explicitly (as demonstrated with the disjunction):</p>
+
+<p>``` scala</p>
+
+<pre><code>val isDivisibleBy13: Int =&gt; Boolean = _ % 13 == 0
+val isPalindrome: Int =&gt; Boolean = x =&gt; { val s = x.toString; s == s.reverse }
+
+scala&gt; import std.anyVal.booleanInstance.{conjunction, disjunction}
+import std.anyVal.booleanInstance.{conjunction, disjunction}
+scala&gt; { implicit val M = conjunction; isPalindrome(13) ⊹ isDivisibleBy13(13) }
+res1: Boolean = false
+scala&gt; disjunction.append(isPalindrome(13), isDivisibleBy13(13))
+res2: Boolean = true
+</code></pre>
+
+<p>```</p>
+
+<p>This allows us to combine boolean values; however, we want to combine functions that return boolean values. Can we use monoids to do so?</p>
+
+<h2>Oh no, not monads</h2>
+
+<p>The first thing I tried was using monads. Monads (again, <a href="http://en.wikibooks.org/wiki/Haskell/Monads">described nicely by the Haskell Wikibook</a> but even more nicely by the wonderful <a href="http://learnyouahaskell.com">Learn You A Haskell</a>) are a way of performing operations on values subject to some context – for example, in the case of the Option monad, the context is that the value might not be present.</p>
+
+<p>Monads are helpful here because functions are monads in their result type (which is to say that a value of type <code>Int =&gt; String</code> is a <code>Monad[String]</code>, in the same way that <code>Some("string")</code> is). Using the function monad seems to allow us to perform operations on the results of functions before they're called: instead of getting the result directly, we instead get a new function back performing our desired computation. This seems to work nicely:</p>
+
+<p>``` scala</p>
+
+<pre><code>def combine(l: Int =&gt; Boolean, r: =&gt; Int =&gt; Boolean)(implicit M: Monoid[Boolean]) =
+  for {
+    ll &lt;- l
+    rr &lt;- r
+  } yield ll ⊹ rr
+
+scala&gt; combine(isPalindrome, isDivisibleBy13)(conjunction)(13)
+res3: Boolean = false
+</code></pre>
+
+<p>```</p>
+
+<p>However, there is a problem:</p>
+
+<p>``` scala</p>
+
+<pre><code>val alas: Int =&gt; Boolean = x =&gt; sys.error("alas")
+
+scala&gt; { implicit val M = disjunction; isDivisibleBy13(13) ⊹ alas(13) }
+res4: Boolean = true
+scala&gt; combine(isDivisibleBy13, alas)(disjunction)(13)
+java.lang.RuntimeException: alas
+</code></pre>
+
+<p>```</p>
+
+<p>Both <code>&amp;&amp;</code> and <code>||</code> will avoid evaluating their second argument if they can determine the result from the first alone; this behaviour is known as <a href="http://en.wikipedia.org/wiki/Short-circuit_evaluation">short‐circuiting</a>. But our <code>combine</code> function doesn't short‐circuit, even though it receives its second argument by name (which allows us to avoid evaluating it).</p>
+
+<h2>Regaining short‐circuiting</h2>
+
+<p>This loss of short‐circuiting is especially vexing because <code>⊹</code> for booleans <em>does</em> short‐circuit. The problem is that in our for comprehension, by the time we get around to plugging our values (<code>ll</code> and <code>rr</code>) into <code>⊹</code>, they have of course been evaluated. I was at a loss as to how to solve this until I discovered that functions returning values that are monoids <em>are themselves</em> monoids. This lets us use the <code>⊹</code> function directly on our predicates, avoiding the over‐eager evaluation we encountered:</p>
+
+<p>``` scala</p>
+
+<pre><code>def combine2(l: Int =&gt; Boolean, r: =&gt; Int =&gt; Boolean)(implicit M: Monoid[Boolean]) =
+  l ⊹ r
+
+scala&gt; combine2(isDivisibleBy13, alas)(disjunction)(13)
+res5: Boolean = true
+</code></pre>
+
+<p>```</p>
+
+<h2>Generalising</h2>
+
+<p>So, now we've got a working function that we can use to combine two predicates. Generalising this to an arbitrary number of predicates is straightforward: the nullary ‘combine’ returns the zero of the monoid, and higher arities can be recursively defined by appending the first value on the combination of the remainder:</p>
+
+<p>``` scala</p>
+
+<pre><code>def recursiveCombination(predicates: List[Int =&gt; Boolean])(implicit M: Monoid[Boolean]): Int =&gt; Boolean =
+  predicates match {
+    case head :: tail =&gt; head ⊹ recursiveCombination(tail)
+    case Nil =&gt; ∅[Int =&gt; Boolean]
+  }
+</code></pre>
+
+<p>```</p>
+
+<p>However, it seems like there should be an existing function to combine monoids in this way, and a little investigation reveals <code>suml</code> in <a href="https://github.com/scalaz/scalaz/blob/scalaz-seven/core/src/main/scala/scalaz/std/syntax/FoldableSyntax.scala">FoldableSyntax.scala</a>:</p>
+
+<p>``` scala</p>
+
+<pre><code>def combined(predicates: Int =&gt; Boolean*)(implicit M: Monoid[Boolean]) =
+  predicates.toList.suml
+
+scala&gt; combined(isDivisibleBy13, isPalindrome, alas)(disjunction)(13)
+res6: Boolean = true
+</code></pre>
+
+<p>```</p>
+
+<p>Fantastic!</p>
+
+<p>It should be clear here that there's nothing special about booleans in this function – they could be replaced with any other monoid and everything would keep on working. We just need to make our function generic:</p>
+
+<p>``` scala</p>
+
+<pre><code>def combined2[A: Monoid](functions: Int =&gt; A*) =
+  functions.toList.suml
+
+scala&gt; combined2(isDivisibleBy13, isPalindrome, alas)(disjunction)(131)
+res7: Boolean = true
+scala&gt; combined2(_.toString, _.toString.reverse).apply(123)
+res8: String = 123321
+</code></pre>
+
+<p>```</p>
+
+<p>Hopefully it's also clear that because the only requirement of our input values is that they're monoids, we can re‐write the above as:</p>
+
+<p>``` scala</p>
+
+<pre><code>def combined3[A: Monoid](values: A*) =
+  values.toList.suml
+</code></pre>
+
+<p>```</p>
+
+<p>If the introduction of monads above confused things, you'll be happy to note that this has removed them. We can now use our <code>combined3</code> function with any monoids at all:</p>
+
+<p>``` scala</p>
+
+<pre><code>scala&gt; { implicit val M = disjunction; combined3(isDivisibleBy13, isPalindrome, alas).apply(131) }
+res9: Boolean = true
+scala&gt; combined3("foo", " ", "bar")
+res10: java.lang.String = foo bar
+scala&gt; val lengthPlusOne = (x: String) =&gt; (x.length + 1).some
+lengthPlusOne: String =&gt; Option[Int] = &lt;function1&gt;
+scala&gt; val lengthHalved = (x: String) =&gt; if (x.length % 2 == 0) (x.length / 2).some else None
+lengthHalved: String =&gt; Option[Int] = &lt;function1&gt;
+scala&gt; List("three", "four").map(combined3(lengthPlusOne, lengthHalved))
+res11: List[Option[Int]] = List(Some(6), Some(7))
+</code></pre>
+
+<p>```</p>
+
+<p>There we have it: a function that takes an arbitrary number of monoids, which in the case of predicates will compute their conjunction or disjunction.</p>
+
+<h2>Bonus: Syntax</h2>
+
+<p>One last thing: it would be nice to replicate the syntax for combining predicates from the original post. This is very simple:</p>
+
+<p>``` scala</p>
+
+<pre><code>trait CombinablePredicate[M] {
+  def &amp;&amp;(f: =&gt; M =&gt; Boolean): M =&gt; Boolean
+  def ||(f: =&gt; M =&gt; Boolean): M =&gt; Boolean
+}
+
+implicit def predicateToCombinablePredicate[M](l: M =&gt; Boolean) = new CombinablePredicate[M]() {
+  def &amp;&amp;(r: =&gt; M =&gt; Boolean) = { implicit val M = conjunction; l ⊹ r }
+  def ||(r: =&gt; M =&gt; Boolean) = { implicit val M = disjunction; l ⊹ r }
+}
+
+scala&gt; (1 to 1000) filter (isDivisibleBy13 &amp;&amp; isPalindrome)
+res12: scala.collection.immutable.IndexedSeq[Int] = Vector(494, 585, 676, 767, 858, 949)
+</code></pre>
+
+<p>```</p>
+
+<p>Given this, we can rewrite the example that initially bugged me as:</p>
+
+<p>``` scala</p>
+
+<pre><code>val ignorePath = isAssetPath || isMonitoringPath
+</code></pre>
+
+<p>```</p>
+
+<p>Success!</p>
+]]></content>
+  </entry>
+  
+</feed>

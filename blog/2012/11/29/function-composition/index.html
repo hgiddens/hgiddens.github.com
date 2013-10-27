@@ -1,0 +1,389 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Function composition - Robotines</title>
+  <meta name="author" content="Huw Giddens">
+
+  
+  <meta name="description" content="Today, I found myself wanting to compose two methods: 1
+2
+3
+4
+5
+6
+// What I had
+def failureToEvent(failure: Failure): Event
+def publish(event: Event &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://blog.robotines.co.nz/blog/2012/11/29/function-composition/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="/atom.xml" rel="alternate" title="Robotines" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Robotines</a></h1>
+  
+    <h2>Hey look, a blog</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:blog.robotines.co.nz" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Function composition</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-11-29T15:27:00+11:00" pubdate data-updated="true">Nov 29<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Today, I found myself wanting to compose two methods:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="c1">// What I had</span>
+</span><span class='line'><span class="k">def</span> <span class="n">failureToEvent</span><span class="o">(</span><span class="n">failure</span><span class="k">:</span> <span class="kt">Failure</span><span class="o">)</span><span class="k">:</span> <span class="kt">Event</span>
+</span><span class='line'><span class="k">def</span> <span class="n">publish</span><span class="o">(</span><span class="n">event</span><span class="k">:</span> <span class="kt">Event</span><span class="o">)</span><span class="k">:</span> <span class="kt">Unit</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// What I needed</span>
+</span><span class='line'><span class="k">val</span> <span class="n">composed</span><span class="k">:</span> <span class="kt">Failure</span> <span class="o">=&gt;</span> <span class="nc">Unit</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Manually writing a function that is the composition of these two is easy enough, but this was a pattern that was repeating itself all over the place; I wanted to be able to define these composed functions inline. Fortunately, composing two functions like this is extremely simple:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">(</span><span class="n">failureToEvent</span> <span class="k">_</span><span class="o">)</span> <span class="n">andThen</span> <span class="n">publish</span>
+</span><span class='line'><span class="n">res0</span><span class="k">:</span> <span class="kt">Failure</span> <span class="o">=&gt;</span> <span class="nc">Unit</span> <span class="k">=</span> <span class="o">&lt;</span><span class="n">function1</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Fantastic!</p>
+
+<h2>Mission accomplished?</h2>
+
+<p>This works well enough, but I discovered some cases where things were a little more complicated:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="c1">// What I had</span>
+</span><span class='line'><span class="k">def</span> <span class="n">failureToOptionalEvent</span><span class="o">(</span><span class="n">failure</span><span class="k">:</span> <span class="kt">Failure</span><span class="o">)</span><span class="k">:</span> <span class="kt">Option</span><span class="o">[</span><span class="kt">Event</span><span class="o">]</span>
+</span><span class='line'><span class="k">def</span> <span class="n">publish</span><span class="o">(</span><span class="n">event</span><span class="k">:</span> <span class="kt">Event</span><span class="o">)</span><span class="k">:</span> <span class="kt">Unit</span>
+</span><span class='line'>
+</span><span class='line'><span class="c1">// What I was willing to accept</span>
+</span><span class='line'><span class="k">val</span> <span class="n">composed</span><span class="k">:</span> <span class="kt">Failure</span> <span class="o">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Unit</span><span class="o">]</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I had the same publish method, but now our failure to event transformation returns an option, stopping us composing things as easily as before. Salvation was at hand, though: I recalled from <a href="http://learnyouahaskell.com">Learn You A Haskell</a> that there&#8217;s a function <code>fmap</code>:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='haskell'><span class='line'><span class="nf">fmap</span> <span class="ow">::</span> <span class="kt">Functor</span> <span class="n">f</span> <span class="ow">=&gt;</span> <span class="p">(</span><span class="n">a</span> <span class="ow">-&gt;</span> <span class="n">b</span><span class="p">)</span> <span class="ow">-&gt;</span> <span class="n">f</span> <span class="n">a</span> <span class="ow">-&gt;</span> <span class="n">f</span> <span class="n">b</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This basically means that <code>fmap</code> is a function taking as an argument a function from some type <code>a</code> to some type <code>b</code> (the <code>a -&gt; b</code> part) and returns a function (<code>f a -&gt; f b</code>) which is the original function “lifted” into some functor (<code>Functor f</code> – a functor can be thought of as a type that you can map over; as you might expect, LYAH has <a href="http://learnyouahaskell.com/making-our-own-types-and-typeclasses#the-functor-typeclass">an excellent introduction</a>). After some digging through Scalaz 7, I found an analogue I could use:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="k">import</span> <span class="nn">scalaz._</span><span class="o">,</span> <span class="nc">Scalaz</span><span class="o">.</span><span class="k">_</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">(</span><span class="n">failureToOptionalEvent</span> <span class="k">_</span><span class="o">).</span><span class="n">andThen</span><span class="o">(</span><span class="n">implicitly</span><span class="o">[</span><span class="kt">Functor</span><span class="o">[</span><span class="kt">Option</span><span class="o">]].</span><span class="n">lift</span><span class="o">(</span><span class="n">publish</span><span class="o">))</span>
+</span><span class='line'><span class="n">res1</span><span class="k">:</span> <span class="kt">Failure</span> <span class="o">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Unit</span><span class="o">]</span> <span class="k">=</span> <span class="o">&lt;</span><span class="n">function1</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>There is quite a bit of boilerplate though. Scalaz does have special syntax for lifting functions, but <a href="http://stackoverflow.com/questions/13507202/how-to-use-lift-from-tofunctorops">I couldn&#8217;t make it work</a>; fortunately it&#8217;s easy enough to write our own equivalent of the <code>lift</code> method here that will work for us (courtesy of Travis Brown):</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">MyFunction1Syntax</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">R</span><span class="o">]</span> <span class="nc">extends</span> <span class="n">syntax</span><span class="o">.</span><span class="nc">Ops</span><span class="o">[</span><span class="kt">A</span> <span class="k">=&gt;</span> <span class="kt">R</span><span class="o">]</span> <span class="o">{</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">fmap</span><span class="o">[</span><span class="kt">F</span><span class="o">[</span><span class="k">_</span><span class="o">]](</span><span class="k">implicit</span> <span class="n">F</span><span class="k">:</span> <span class="kt">scalaz.Functor</span><span class="o">[</span><span class="kt">F</span><span class="o">])</span> <span class="k">=</span> <span class="n">F</span> <span class="n">lift</span> <span class="n">self</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">implicit</span> <span class="k">def</span> <span class="n">toMyFunction1Syntax</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">R</span><span class="o">](</span><span class="n">f</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">R</span><span class="o">)</span> <span class="k">=</span>
+</span><span class='line'>  <span class="k">new</span> <span class="nc">MyFunction1Syntax</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">R</span><span class="o">]</span> <span class="o">{</span> <span class="k">def</span> <span class="n">self</span> <span class="k">=</span> <span class="n">f</span> <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">(</span><span class="n">failureToOptionalEvent</span> <span class="k">_</span><span class="o">).</span><span class="n">andThen</span><span class="o">((</span><span class="n">publish</span> <span class="k">_</span><span class="o">).</span><span class="n">fmap</span><span class="o">[</span><span class="kt">Option</span><span class="o">])</span>
+</span><span class='line'><span class="n">res2</span><span class="k">:</span> <span class="kt">Failure</span> <span class="o">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Unit</span><span class="o">]</span> <span class="k">=</span> <span class="o">&lt;</span><span class="n">function1</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>More than meets the eye</h2>
+
+<p>This works perfectly well, but I was curious if there was a better way to do this – or at least, a way that didn&#8217;t involve replicating chunks of Scalaz. After some thought, it occurred to me that since functions and options are monads, we can use monad transformers here! <a href="http://en.wikibooks.org/wiki/Haskell/Monad_transformers">Monad transformers</a> are a way of layering multiple monads on top of each other to create a “monad stack”; the resulting monad transformer is itself a monad which combines the effects of its constituent monads in order. For example, if we have a <code>List[Option[Int]]</code>, we can use the <code>OptionT</code> monad transformer to map a function <code>Int =&gt; Int</code> over the transformed instance (the call to <code>run</code> is to extract the value from the transformer instance):</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="nc">OptionT</span><span class="o">(</span><span class="nc">List</span><span class="o">(</span><span class="mf">1.</span><span class="n">some</span><span class="o">,</span> <span class="mf">2.</span><span class="n">some</span><span class="o">,</span> <span class="mf">3.</span><span class="n">some</span><span class="o">,</span> <span class="nc">None</span><span class="o">)).</span><span class="n">map</span><span class="o">(</span><span class="k">_</span> <span class="o">+</span> <span class="mi">1</span><span class="o">).</span><span class="n">run</span>
+</span><span class='line'><span class="n">res3</span><span class="k">:</span> <span class="kt">List</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">Int</span><span class="o">]]</span> <span class="k">=</span> <span class="nc">List</span><span class="o">(</span><span class="nc">Some</span><span class="o">(</span><span class="mi">2</span><span class="o">),</span> <span class="nc">Some</span><span class="o">(</span><span class="mi">3</span><span class="o">),</span> <span class="nc">Some</span><span class="o">(</span><span class="mi">4</span><span class="o">),</span> <span class="nc">None</span><span class="o">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>So in much the same way, because functions are monads of their return type we should be able to use <code>OptionT</code> to map <code>publish</code> over the transformed instance:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="nc">OptionT</span><span class="o">(</span><span class="n">failureToOptionalEvent</span> <span class="k">_</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="n">publish</span><span class="o">).</span><span class="n">run</span>
+</span><span class='line'><span class="o">&lt;</span><span class="n">console</span><span class="k">&gt;:</span><span class="mi">23</span><span class="k">:</span> <span class="kt">error:</span> <span class="kt">no</span> <span class="k">type</span> <span class="kt">parameters</span> <span class="kt">for</span> <span class="kt">method</span> <span class="kt">apply:</span> <span class="o">(</span><span class="kt">run:</span> <span class="kt">F</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">A</span><span class="o">]])</span><span class="n">scalaz</span><span class="o">.</span><span class="nc">OptionT</span><span class="o">[</span><span class="kt">F</span>,<span class="kt">A</span><span class="o">]</span> <span class="n">in</span> <span class="k">object</span> <span class="nc">OptionT</span> <span class="n">exist</span> <span class="n">so</span> <span class="n">that</span> <span class="n">it</span> <span class="n">can</span> <span class="n">be</span> <span class="n">applied</span> <span class="n">to</span> <span class="n">arguments</span> <span class="o">(</span><span class="nc">Failure</span> <span class="k">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Event</span><span class="o">])</span>
+</span><span class='line'> <span class="o">---</span> <span class="n">because</span> <span class="o">---</span>
+</span><span class='line'><span class="n">argument</span> <span class="n">expression</span><span class="-Symbol">&#39;s</span> <span class="k">type</span> <span class="kt">is</span> <span class="kt">not</span> <span class="kt">compatible</span> <span class="kt">with</span> <span class="kt">formal</span> <span class="kt">parameter</span> <span class="k">type</span><span class="o">;</span>
+</span><span class='line'> <span class="n">found</span>   <span class="k">:</span> <span class="kt">Failure</span> <span class="o">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Event</span><span class="o">]</span>
+</span><span class='line'> <span class="n">required</span><span class="k">:</span> <span class="kt">?F</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">?A</span><span class="o">]]</span>
+</span><span class='line'>              <span class="nc">OptionT</span><span class="o">(</span><span class="n">failureToOptionalEvent</span> <span class="k">_</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="n">publish</span><span class="o">).</span><span class="n">run</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Ugh. This is Scala&#8217;s way of telling us that we&#8217;ve asked too much of type inference; once you get past a single generic parameter this crops up with distressing frequency. We could fix this by explicitly specifying the type parameters, but I don&#8217;t like doing this; you&#8217;re faced with either an explosion of little type aliases (e.g., <code>type IntTo[+A] = Int =&gt; A</code>) or the Lovecraftian horror that is the type lambda syntax. What I instead did was add a <code>.optionT</code> to appropriate function instances:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">ExtraFunction1Ops</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">B</span><span class="o">]</span> <span class="nc">extends</span> <span class="n">syntax</span><span class="o">.</span><span class="nc">Ops</span><span class="o">[</span><span class="kt">A</span> <span class="k">=&gt;</span> <span class="kt">B</span><span class="o">]</span> <span class="o">{</span>
+</span><span class='line'>  <span class="k">def</span> <span class="n">optionT</span><span class="o">[</span><span class="kt">C</span><span class="o">](</span><span class="k">implicit</span> <span class="n">ev</span><span class="k">:</span> <span class="kt">B</span> <span class="k">&lt;:</span><span class="kt">&lt;</span> <span class="kt">Option</span><span class="o">[</span><span class="kt">C</span><span class="o">])</span> <span class="k">=</span>
+</span><span class='line'>    <span class="nc">OptionT</span><span class="o">[({</span> <span class="k">type</span> <span class="kt">λ</span><span class="o">[</span><span class="kt">+α</span><span class="o">]</span> <span class="kt">=</span> <span class="kt">A</span> <span class="k">=&gt;</span> <span class="kt">α</span> <span class="o">})</span><span class="k">#</span><span class="kt">λ</span>, <span class="kt">C</span><span class="o">](</span><span class="n">self</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">ev</span><span class="o">))</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'><span class="k">implicit</span> <span class="k">def</span> <span class="n">function1AsExtraFunction1Ops</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">B</span><span class="o">](</span><span class="n">fn</span><span class="k">:</span> <span class="kt">A</span> <span class="o">=&gt;</span> <span class="n">B</span><span class="o">)</span> <span class="k">=</span>
+</span><span class='line'>  <span class="k">new</span> <span class="nc">IndraFunction1Ops</span><span class="o">[</span><span class="kt">A</span>, <span class="kt">B</span><span class="o">]</span> <span class="o">{</span> <span class="k">def</span> <span class="n">self</span> <span class="k">=</span> <span class="n">fn</span> <span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The definition of the <code>optionT</code> method probably warrants discussion:</p>
+
+<ul>
+<li>the trait <code>ExtraFunction1Ops</code> is adding operations to instances of <code>A =&gt; B</code>; however, <code>.optionT</code> should only be callable on instances where <code>B</code> is an option of something. The implicit argument ensures that this is so: there will be an in‐scope implicit of type <code>B &lt;:&lt; Option[C]</code> iff <code>B</code> is, in fact, some subtype of <code>Option[C]</code>.</li>
+<li><code>C</code> is an unconstrained generic parameter; we need this because we have to provide it to <code>OptionT.apply</code>.</li>
+<li>The horrible type lambda <code>({ type λ[+α] = A =&gt; α })#λ</code> is required because <code>OptionT</code>&#8217;s first type parameter needs to be the type constructor for the outer monad; while <code>Function1</code>&#8217;s type constructor is binary, the type constructor we provide to <code>OptionT</code> <em>must</em> be unary, and so we use the type lambda to constrain the first type parameter of <code>Function1</code> to <code>A</code>.</li>
+<li>Finally, we have to map our <code>ev</code>, our implicit type evidence argument, over the function; this simply converts the signature of <code>self</code> from <code>A =&gt; B</code> to <code>A =&gt; Option[C]</code>.</li>
+</ul>
+
+
+<p>So to recap, initially we had <code>(failureToEvent _) andThen publish</code>. For unary functions, <code>andThen</code> is identical to <code>map</code>, so we can rewrite this as <code>(failureToEvent _).map(publish)</code>. And as for our functions from a failure to an optional event?</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">(</span><span class="n">failureToOptionalEvent</span> <span class="k">_</span><span class="o">).</span><span class="n">optionT</span><span class="o">.</span><span class="n">map</span><span class="o">(</span><span class="n">publish</span><span class="o">).</span><span class="n">run</span>
+</span><span class='line'><span class="n">res4</span><span class="k">:</span> <span class="kt">Failure</span> <span class="o">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Unit</span><span class="o">]</span> <span class="k">=</span> <span class="o">&lt;</span><span class="n">function1</span><span class="o">&gt;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Success.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Huw Giddens</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-11-29T15:27:00+11:00" pubdate data-updated="true">Nov 29<span>th</span>, 2012</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/scala/'>scala</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://blog.robotines.co.nz/blog/2012/11/29/function-composition/" data-via="hg_" data-counturl="http://blog.robotines.co.nz/blog/2012/11/29/function-composition/" >Tweet</a>
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/11/12/combining-predicates-in-scala-with-scalaz/" title="Previous Post: Combining predicates in Scala with Scalaz">&laquo; Combining predicates in Scala with Scalaz</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/10/27/lexical-and-dynamic-scoping/" title="Next Post: Lexical and dynamic scoping">Lexical and dynamic scoping &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2013/10/27/lexical-and-dynamic-scoping/">Lexical and dynamic scoping</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2012/11/29/function-composition/">Function composition</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2012/11/12/combining-predicates-in-scala-with-scalaz/">Combining predicates in Scala with Scalaz</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("hg_", 3, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/hg_" class="twitter-follow-button" data-show-count="false">Follow @hg_</a>
+  
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2013 - Huw Giddens -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>

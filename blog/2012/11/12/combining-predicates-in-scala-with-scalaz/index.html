@@ -1,0 +1,472 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Combining predicates in Scala with Scalaz - Robotines</title>
+  <meta name="author" content="Huw Giddens">
+
+  
+  <meta name="description" content="Recently I was catching up on some Scala programming blogs when I found a post about combining predicates. I&#8217;d been wondering about this myself &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://blog.robotines.co.nz/blog/2012/11/12/combining-predicates-in-scala-with-scalaz/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script src="/javascripts/ender.js"></script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <link href="/atom.xml" rel="alternate" title="Robotines" type="application/atom+xml">
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="http://fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="http://fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Robotines</a></h1>
+  
+    <h2>Hey look, a blog</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="http://google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="q" value="site:blog.robotines.co.nz" />
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Combining predicates in Scala with Scalaz</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-11-12T13:04:00+11:00" pubdate data-updated="true">Nov 12<span>th</span>, 2012</time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Recently I was catching up on some Scala programming blogs when I found <a href="http://timepit.eu/~frank/blog/2012/08/combining_predicates_in_scala/">a post about combining predicates</a>. I&#8217;d been wondering about this myself. I find it incredibly useful to be able to simply combine predicates; I find it quite inelegant to write code like the following:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="c1">// Given</span>
+</span><span class='line'><span class="k">trait</span> <span class="nc">Request</span> <span class="o">{</span> <span class="k">def</span> <span class="n">path</span><span class="k">:</span> <span class="kt">String</span> <span class="o">}</span>
+</span><span class='line'><span class="k">val</span> <span class="n">isAssetPath</span><span class="k">:</span> <span class="kt">String</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span>
+</span><span class='line'><span class="k">val</span> <span class="n">isMonitoringPath</span><span class="k">:</span> <span class="kt">String</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">def</span> <span class="n">ignorePath</span><span class="o">(</span><span class="n">request</span><span class="k">:</span> <span class="kt">Request</span><span class="o">)</span> <span class="k">=</span> <span class="n">isAssetPath</span><span class="o">(</span><span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="o">)</span> <span class="o">||</span> <span class="n">isMonitoringPath</span><span class="o">(</span><span class="n">request</span><span class="o">.</span><span class="n">path</span><span class="o">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>I had, however, settled on manually combining them as above, and moved on. However, since then I&#8217;ve started trying to get my head around typeclass‐oriented functional programming in general and <a href="https://github.com/scalaz/scalaz">Scalaz 7</a> in particular, and decided to see if that offered a nice solution.</p>
+
+<h2>Combining booleans</h2>
+
+<p>I knew already that Scalaz gives us a nice, generic way to combine booleans: by treating them as monoids. Monoids are a very simple concept <a href="http://en.wikibooks.org/wiki/Haskell/Monoids">that the Haskell Wikibook defines rather nicely</a>:</p>
+
+<blockquote><p>[A] monoid is a data type with an associative operation which combines two elements and a “zero” value which acts as a neutral element for the operation.</p></blockquote>
+
+<p>The sum monoid for integers is an easy one to consider. The combining operation used is addition, and the zero value is zero (the <code>⊹</code> operator below is Scalaz syntax for the append operation; it has an ASCII equivalent of <code>|+|</code>):</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="mi">1</span> <span class="o">⊹</span> <span class="mi">2</span>
+</span><span class='line'><span class="n">res0</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=</span> <span class="mi">3</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For booleans, it&#8217;s a little trickier: there are two common monoids, representing conjunction (<code>&amp;&amp;</code>, with <code>true</code> as the zero) and disjunction (<code>||</code>, with <code>false</code>). Because neither of these makes more sense than the other as a “default” boolean monoid, Scalaz doesn&#8217;t place either in the implicit scope; we have to do this ourselves with the appropriate one (as demonstrated by the conjunction example below) or alternatively use the monoid object explicitly (as demonstrated with the disjunction):</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">val</span> <span class="n">isDivisibleBy13</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span> <span class="k">=</span> <span class="k">_</span> <span class="o">%</span> <span class="mi">13</span> <span class="o">==</span> <span class="mi">0</span>
+</span><span class='line'><span class="k">val</span> <span class="n">isPalindrome</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span> <span class="k">=</span> <span class="n">x</span> <span class="k">=&gt;</span> <span class="o">{</span> <span class="k">val</span> <span class="n">s</span> <span class="k">=</span> <span class="n">x</span><span class="o">.</span><span class="n">toString</span><span class="o">;</span> <span class="n">s</span> <span class="o">==</span> <span class="n">s</span><span class="o">.</span><span class="n">reverse</span> <span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="k">import</span> <span class="nn">std.anyVal.booleanInstance.</span><span class="o">{</span><span class="n">conjunction</span><span class="o">,</span> <span class="n">disjunction</span><span class="o">}</span>
+</span><span class='line'><span class="k">import</span> <span class="nn">std.anyVal.booleanInstance.</span><span class="o">{</span><span class="n">conjunction</span><span class="o">,</span> <span class="n">disjunction</span><span class="o">}</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">{</span> <span class="k">implicit</span> <span class="k">val</span> <span class="n">M</span> <span class="k">=</span> <span class="n">conjunction</span><span class="o">;</span> <span class="n">isPalindrome</span><span class="o">(</span><span class="mi">13</span><span class="o">)</span> <span class="o">⊹</span> <span class="n">isDivisibleBy13</span><span class="o">(</span><span class="mi">13</span><span class="o">)</span> <span class="o">}</span>
+</span><span class='line'><span class="n">res1</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">false</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">disjunction</span><span class="o">.</span><span class="n">append</span><span class="o">(</span><span class="n">isPalindrome</span><span class="o">(</span><span class="mi">13</span><span class="o">),</span> <span class="n">isDivisibleBy13</span><span class="o">(</span><span class="mi">13</span><span class="o">))</span>
+</span><span class='line'><span class="n">res2</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">true</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>This allows us to combine boolean values; however, we want to combine functions that return boolean values. Can we use monoids to do so?</p>
+
+<h2>Oh no, not monads</h2>
+
+<p>The first thing I tried was using monads. Monads (again, <a href="http://en.wikibooks.org/wiki/Haskell/Monads">described nicely by the Haskell Wikibook</a> but even more nicely by the wonderful <a href="http://learnyouahaskell.com">Learn You A Haskell</a>) are a way of performing operations on values subject to some context – for example, in the case of the Option monad, the context is that the value might not be present.</p>
+
+<p>Monads are helpful here because functions are monads in their result type (which is to say that a value of type <code>Int =&gt; String</code> is a <code>Monad[String]</code>, in the same way that <code>Some("string")</code> is). Using the function monad seems to allow us to perform operations on the results of functions before they&#8217;re called: instead of getting the result directly, we instead get a new function back performing our desired computation. This seems to work nicely:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">combine</span><span class="o">(</span><span class="n">l</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span><span class="o">,</span> <span class="n">r</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="nc">Int</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)(</span><span class="k">implicit</span> <span class="n">M</span><span class="k">:</span> <span class="kt">Monoid</span><span class="o">[</span><span class="kt">Boolean</span><span class="o">])</span> <span class="k">=</span>
+</span><span class='line'>  <span class="k">for</span> <span class="o">{</span>
+</span><span class='line'>    <span class="n">ll</span> <span class="k">&lt;-</span> <span class="n">l</span>
+</span><span class='line'>    <span class="n">rr</span> <span class="k">&lt;-</span> <span class="n">r</span>
+</span><span class='line'>  <span class="o">}</span> <span class="k">yield</span> <span class="n">ll</span> <span class="o">⊹</span> <span class="n">rr</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">combine</span><span class="o">(</span><span class="n">isPalindrome</span><span class="o">,</span> <span class="n">isDivisibleBy13</span><span class="o">)(</span><span class="n">conjunction</span><span class="o">)(</span><span class="mi">13</span><span class="o">)</span>
+</span><span class='line'><span class="n">res3</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">false</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>However, there is a problem:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">val</span> <span class="n">alas</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span> <span class="k">=</span> <span class="n">x</span> <span class="k">=&gt;</span> <span class="n">sys</span><span class="o">.</span><span class="n">error</span><span class="o">(</span><span class="s">&quot;alas&quot;</span><span class="o">)</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">{</span> <span class="k">implicit</span> <span class="k">val</span> <span class="n">M</span> <span class="k">=</span> <span class="n">disjunction</span><span class="o">;</span> <span class="n">isDivisibleBy13</span><span class="o">(</span><span class="mi">13</span><span class="o">)</span> <span class="o">⊹</span> <span class="n">alas</span><span class="o">(</span><span class="mi">13</span><span class="o">)</span> <span class="o">}</span>
+</span><span class='line'><span class="n">res4</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">combine</span><span class="o">(</span><span class="n">isDivisibleBy13</span><span class="o">,</span> <span class="n">alas</span><span class="o">)(</span><span class="n">disjunction</span><span class="o">)(</span><span class="mi">13</span><span class="o">)</span>
+</span><span class='line'><span class="n">java</span><span class="o">.</span><span class="n">lang</span><span class="o">.</span><span class="nc">RuntimeException</span><span class="k">:</span> <span class="kt">alas</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Both <code>&amp;&amp;</code> and <code>||</code> will avoid evaluating their second argument if they can determine the result from the first alone; this behaviour is known as <a href="http://en.wikipedia.org/wiki/Short-circuit_evaluation">short‐circuiting</a>. But our <code>combine</code> function doesn&#8217;t short‐circuit, even though it receives its second argument by name (which allows us to avoid evaluating it).</p>
+
+<h2>Regaining short‐circuiting</h2>
+
+<p>This loss of short‐circuiting is especially vexing because <code>⊹</code> for booleans <em>does</em> short‐circuit. The problem is that in our for comprehension, by the time we get around to plugging our values (<code>ll</code> and <code>rr</code>) into <code>⊹</code>, they have of course been evaluated. I was at a loss as to how to solve this until I discovered that functions returning values that are monoids <em>are themselves</em> monoids. This lets us use the <code>⊹</code> function directly on our predicates, avoiding the over‐eager evaluation we encountered:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">combine2</span><span class="o">(</span><span class="n">l</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span><span class="o">,</span> <span class="n">r</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="nc">Int</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)(</span><span class="k">implicit</span> <span class="n">M</span><span class="k">:</span> <span class="kt">Monoid</span><span class="o">[</span><span class="kt">Boolean</span><span class="o">])</span> <span class="k">=</span>
+</span><span class='line'>  <span class="n">l</span> <span class="o">⊹</span> <span class="n">r</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">combine2</span><span class="o">(</span><span class="n">isDivisibleBy13</span><span class="o">,</span> <span class="n">alas</span><span class="o">)(</span><span class="n">disjunction</span><span class="o">)(</span><span class="mi">13</span><span class="o">)</span>
+</span><span class='line'><span class="n">res5</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">true</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Generalising</h2>
+
+<p>So, now we&#8217;ve got a working function that we can use to combine two predicates. Generalising this to an arbitrary number of predicates is straightforward: the nullary ‘combine’ returns the zero of the monoid, and higher arities can be recursively defined by appending the first value on the combination of the remainder:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">recursiveCombination</span><span class="o">(</span><span class="n">predicates</span><span class="k">:</span> <span class="kt">List</span><span class="o">[</span><span class="kt">Int</span> <span class="k">=&gt;</span> <span class="kt">Boolean</span><span class="o">])(</span><span class="k">implicit</span> <span class="n">M</span><span class="k">:</span> <span class="kt">Monoid</span><span class="o">[</span><span class="kt">Boolean</span><span class="o">])</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span> <span class="k">=</span>
+</span><span class='line'>  <span class="n">predicates</span> <span class="k">match</span> <span class="o">{</span>
+</span><span class='line'>    <span class="k">case</span> <span class="n">head</span> <span class="o">::</span> <span class="n">tail</span> <span class="k">=&gt;</span> <span class="n">head</span> <span class="o">⊹</span> <span class="n">recursiveCombination</span><span class="o">(</span><span class="n">tail</span><span class="o">)</span>
+</span><span class='line'>    <span class="k">case</span> <span class="nc">Nil</span> <span class="k">=&gt;</span> <span class="o">∅[</span><span class="kt">Int</span> <span class="k">=&gt;</span> <span class="kt">Boolean</span><span class="o">]</span>
+</span><span class='line'>  <span class="o">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>However, it seems like there should be an existing function to combine monoids in this way, and a little investigation reveals <code>suml</code> in <a href="https://github.com/scalaz/scalaz/blob/scalaz-seven/core/src/main/scala/scalaz/std/syntax/FoldableSyntax.scala">FoldableSyntax.scala</a>:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">combined</span><span class="o">(</span><span class="n">predicates</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span><span class="o">*)(</span><span class="k">implicit</span> <span class="n">M</span><span class="k">:</span> <span class="kt">Monoid</span><span class="o">[</span><span class="kt">Boolean</span><span class="o">])</span> <span class="k">=</span>
+</span><span class='line'>  <span class="n">predicates</span><span class="o">.</span><span class="n">toList</span><span class="o">.</span><span class="n">suml</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">combined</span><span class="o">(</span><span class="n">isDivisibleBy13</span><span class="o">,</span> <span class="n">isPalindrome</span><span class="o">,</span> <span class="n">alas</span><span class="o">)(</span><span class="n">disjunction</span><span class="o">)(</span><span class="mi">13</span><span class="o">)</span>
+</span><span class='line'><span class="n">res6</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">true</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Fantastic!</p>
+
+<p>It should be clear here that there&#8217;s nothing special about booleans in this function – they could be replaced with any other monoid and everything would keep on working. We just need to make our function generic:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">combined2</span><span class="o">[</span><span class="kt">A:</span> <span class="kt">Monoid</span><span class="o">](</span><span class="n">functions</span><span class="k">:</span> <span class="kt">Int</span> <span class="o">=&gt;</span> <span class="n">A</span><span class="o">*)</span> <span class="k">=</span>
+</span><span class='line'>  <span class="n">functions</span><span class="o">.</span><span class="n">toList</span><span class="o">.</span><span class="n">suml</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">combined2</span><span class="o">(</span><span class="n">isDivisibleBy13</span><span class="o">,</span> <span class="n">isPalindrome</span><span class="o">,</span> <span class="n">alas</span><span class="o">)(</span><span class="n">disjunction</span><span class="o">)(</span><span class="mi">131</span><span class="o">)</span>
+</span><span class='line'><span class="n">res7</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">combined2</span><span class="o">(</span><span class="k">_</span><span class="o">.</span><span class="n">toString</span><span class="o">,</span> <span class="k">_</span><span class="o">.</span><span class="n">toString</span><span class="o">.</span><span class="n">reverse</span><span class="o">).</span><span class="n">apply</span><span class="o">(</span><span class="mi">123</span><span class="o">)</span>
+</span><span class='line'><span class="n">res8</span><span class="k">:</span> <span class="kt">String</span> <span class="o">=</span> <span class="mi">123321</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Hopefully it&#8217;s also clear that because the only requirement of our input values is that they&#8217;re monoids, we can re‐write the above as:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">def</span> <span class="n">combined3</span><span class="o">[</span><span class="kt">A:</span> <span class="kt">Monoid</span><span class="o">](</span><span class="n">values</span><span class="k">:</span> <span class="kt">A*</span><span class="o">)</span> <span class="k">=</span>
+</span><span class='line'>  <span class="n">values</span><span class="o">.</span><span class="n">toList</span><span class="o">.</span><span class="n">suml</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>If the introduction of monads above confused things, you&#8217;ll be happy to note that this has removed them. We can now use our <code>combined3</code> function with any monoids at all:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">{</span> <span class="k">implicit</span> <span class="k">val</span> <span class="n">M</span> <span class="k">=</span> <span class="n">disjunction</span><span class="o">;</span> <span class="n">combined3</span><span class="o">(</span><span class="n">isDivisibleBy13</span><span class="o">,</span> <span class="n">isPalindrome</span><span class="o">,</span> <span class="n">alas</span><span class="o">).</span><span class="n">apply</span><span class="o">(</span><span class="mi">131</span><span class="o">)</span> <span class="o">}</span>
+</span><span class='line'><span class="n">res9</span><span class="k">:</span> <span class="kt">Boolean</span> <span class="o">=</span> <span class="kc">true</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="n">combined3</span><span class="o">(</span><span class="s">&quot;foo&quot;</span><span class="o">,</span> <span class="s">&quot; &quot;</span><span class="o">,</span> <span class="s">&quot;bar&quot;</span><span class="o">)</span>
+</span><span class='line'><span class="n">res10</span><span class="k">:</span> <span class="kt">java.lang.String</span> <span class="o">=</span> <span class="n">foo</span> <span class="n">bar</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="k">val</span> <span class="n">lengthPlusOne</span> <span class="k">=</span> <span class="o">(</span><span class="n">x</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">length</span> <span class="o">+</span> <span class="mi">1</span><span class="o">).</span><span class="n">some</span>
+</span><span class='line'><span class="n">lengthPlusOne</span><span class="k">:</span> <span class="kt">String</span> <span class="o">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span> <span class="k">=</span> <span class="o">&lt;</span><span class="n">function1</span><span class="o">&gt;</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="k">val</span> <span class="n">lengthHalved</span> <span class="k">=</span> <span class="o">(</span><span class="n">x</span><span class="k">:</span> <span class="kt">String</span><span class="o">)</span> <span class="k">=&gt;</span> <span class="k">if</span> <span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">length</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="o">)</span> <span class="o">(</span><span class="n">x</span><span class="o">.</span><span class="n">length</span> <span class="o">/</span> <span class="mi">2</span><span class="o">).</span><span class="n">some</span> <span class="k">else</span> <span class="nc">None</span>
+</span><span class='line'><span class="n">lengthHalved</span><span class="k">:</span> <span class="kt">String</span> <span class="o">=&gt;</span> <span class="nc">Option</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span> <span class="k">=</span> <span class="o">&lt;</span><span class="n">function1</span><span class="o">&gt;</span>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="nc">List</span><span class="o">(</span><span class="s">&quot;three&quot;</span><span class="o">,</span> <span class="s">&quot;four&quot;</span><span class="o">).</span><span class="n">map</span><span class="o">(</span><span class="n">combined3</span><span class="o">(</span><span class="n">lengthPlusOne</span><span class="o">,</span> <span class="n">lengthHalved</span><span class="o">))</span>
+</span><span class='line'><span class="n">res11</span><span class="k">:</span> <span class="kt">List</span><span class="o">[</span><span class="kt">Option</span><span class="o">[</span><span class="kt">Int</span><span class="o">]]</span> <span class="k">=</span> <span class="nc">List</span><span class="o">(</span><span class="nc">Some</span><span class="o">(</span><span class="mi">6</span><span class="o">),</span> <span class="nc">Some</span><span class="o">(</span><span class="mi">7</span><span class="o">))</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>There we have it: a function that takes an arbitrary number of monoids, which in the case of predicates will compute their conjunction or disjunction.</p>
+
+<h2>Bonus: Syntax</h2>
+
+<p>One last thing: it would be nice to replicate the syntax for combining predicates from the original post. This is very simple:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">trait</span> <span class="nc">CombinablePredicate</span><span class="o">[</span><span class="kt">M</span><span class="o">]</span> <span class="o">{</span>
+</span><span class='line'>  <span class="k">def</span> <span class="o">&amp;&amp;(</span><span class="n">f</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="n">M</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)</span><span class="k">:</span> <span class="kt">M</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span>
+</span><span class='line'>  <span class="k">def</span> <span class="o">||(</span><span class="n">f</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="n">M</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)</span><span class="k">:</span> <span class="kt">M</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">implicit</span> <span class="k">def</span> <span class="n">predicateToCombinablePredicate</span><span class="o">[</span><span class="kt">M</span><span class="o">](</span><span class="n">l</span><span class="k">:</span> <span class="kt">M</span> <span class="o">=&gt;</span> <span class="nc">Boolean</span><span class="o">)</span> <span class="k">=</span> <span class="k">new</span> <span class="nc">CombinablePredicate</span><span class="o">[</span><span class="kt">M</span><span class="o">]()</span> <span class="o">{</span>
+</span><span class='line'>  <span class="k">def</span> <span class="o">&amp;&amp;(</span><span class="n">r</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="n">M</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)</span> <span class="k">=</span> <span class="o">{</span> <span class="k">implicit</span> <span class="k">val</span> <span class="n">M</span> <span class="k">=</span> <span class="n">conjunction</span><span class="o">;</span> <span class="n">l</span> <span class="o">⊹</span> <span class="n">r</span> <span class="o">}</span>
+</span><span class='line'>  <span class="k">def</span> <span class="o">||(</span><span class="n">r</span><span class="k">:</span> <span class="o">=&gt;</span> <span class="n">M</span> <span class="k">=&gt;</span> <span class="nc">Boolean</span><span class="o">)</span> <span class="k">=</span> <span class="o">{</span> <span class="k">implicit</span> <span class="k">val</span> <span class="n">M</span> <span class="k">=</span> <span class="n">disjunction</span><span class="o">;</span> <span class="n">l</span> <span class="o">⊹</span> <span class="n">r</span> <span class="o">}</span>
+</span><span class='line'><span class="o">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="n">scala</span><span class="o">&gt;</span> <span class="o">(</span><span class="mi">1</span> <span class="n">to</span> <span class="mi">1000</span><span class="o">)</span> <span class="n">filter</span> <span class="o">(</span><span class="n">isDivisibleBy13</span> <span class="o">&amp;&amp;</span> <span class="n">isPalindrome</span><span class="o">)</span>
+</span><span class='line'><span class="n">res12</span><span class="k">:</span> <span class="kt">scala.collection.immutable.IndexedSeq</span><span class="o">[</span><span class="kt">Int</span><span class="o">]</span> <span class="k">=</span> <span class="nc">Vector</span><span class="o">(</span><span class="mi">494</span><span class="o">,</span> <span class="mi">585</span><span class="o">,</span> <span class="mi">676</span><span class="o">,</span> <span class="mi">767</span><span class="o">,</span> <span class="mi">858</span><span class="o">,</span> <span class="mi">949</span><span class="o">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Given this, we can rewrite the example that initially bugged me as:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='scala'><span class='line'><span class="k">val</span> <span class="n">ignorePath</span> <span class="k">=</span> <span class="n">isAssetPath</span> <span class="o">||</span> <span class="n">isMonitoringPath</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Success!</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Huw Giddens</span></span>
+
+      
+
+
+
+
+
+
+
+
+  
+
+
+<time datetime="2012-11-12T13:04:00+11:00" pubdate data-updated="true">Nov 12<span>th</span>, 2012</time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/scala/'>scala</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  <a href="http://twitter.com/share" class="twitter-share-button" data-url="http://blog.robotines.co.nz/blog/2012/11/12/combining-predicates-in-scala-with-scalaz/" data-via="hg_" data-counturl="http://blog.robotines.co.nz/blog/2012/11/12/combining-predicates-in-scala-with-scalaz/" >Tweet</a>
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/11/29/function-composition/" title="Next Post: Function composition">Function composition &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2013/10/27/lexical-and-dynamic-scoping/">Lexical and dynamic scoping</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2012/11/29/function-composition/">Function composition</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2012/11/12/combining-predicates-in-scala-with-scalaz/">Combining predicates in Scala with Scalaz</a>
+      </li>
+    
+  </ul>
+</section>
+
+
+<section>
+  <h1>Latest Tweets</h1>
+  <ul id="tweets">
+    <li class="loading">Status updating...</li>
+  </ul>
+  <script type="text/javascript">
+    $.domReady(function(){
+      getTwitterFeed("hg_", 3, false);
+    });
+  </script>
+  <script src="/javascripts/twitter.js" type="text/javascript"> </script>
+  
+    <a href="http://twitter.com/hg_" class="twitter-follow-button" data-show-count="false">Follow @hg_</a>
+  
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2013 - Huw Giddens -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+  <script type="text/javascript">
+    (function(){
+      var twitterWidgets = document.createElement('script');
+      twitterWidgets.type = 'text/javascript';
+      twitterWidgets.async = true;
+      twitterWidgets.src = 'http://platform.twitter.com/widgets.js';
+      document.getElementsByTagName('head')[0].appendChild(twitterWidgets);
+    })();
+  </script>
+
+
+
+
+
+</body>
+</html>
